@@ -1072,6 +1072,13 @@ pub fn run() {
             // onboarding surfaces it.
             //
             // PATH separator is ':' on Unix and ';' on Windows.
+            //
+            // `node` and `coven` are canonicalized, which on Windows yields
+            // \\?\-prefixed verbatim paths. A verbatim entry in PATH is dead
+            // weight: PATH search doesn't resolve names through \\?\ dirs, so
+            // the sidecar's children (npm, git, harnesses) miss exactly the
+            // dirs prepended for them. Strip the prefix like the node args
+            // above (node_arg_path is a no-op off Windows).
             let path_sep = if cfg!(target_os = "windows") { ";" } else { ":" };
             let default_path = if cfg!(target_os = "windows") {
                 std::env::var("PATH").unwrap_or_else(|_| "C:\\Windows\\system32;C:\\Windows".into())
@@ -1080,14 +1087,19 @@ pub fn run() {
             };
             let mut augmented_path = default_path;
             if let Some(dir) = node.parent() {
-                augmented_path = format!("{}{}{}", dir.display(), path_sep, augmented_path);
+                augmented_path =
+                    format!("{}{}{}", node_arg_path(dir).display(), path_sep, augmented_path);
             }
             match find_coven() {
                 Some(coven) => {
                     log::info!("[cave] using coven at {}", coven.display());
                     if let Some(dir) = coven.parent() {
-                        augmented_path =
-                            format!("{}{}{}", dir.display(), path_sep, augmented_path);
+                        augmented_path = format!(
+                            "{}{}{}",
+                            node_arg_path(dir).display(),
+                            path_sep,
+                            augmented_path
+                        );
                     }
                 }
                 None => log::warn!(
